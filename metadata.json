@@ -1,0 +1,7 @@
+{
+  "name": "PCFT Union Digital Assistant",
+  "description": "Expert advisor for the Pierce College Federation of Teachers collective bargaining agreement, providing precise contract interpretations and union guidance.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
