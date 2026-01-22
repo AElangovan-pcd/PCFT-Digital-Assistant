@@ -78,9 +78,8 @@ ARTICLE 16: GRIEVANCE PROCEDURE
 - Step 4: Mediation/Arbitration.
 
 EXECUTIVE BOARD CONTACTS:
-- President: president@pcft.wa.aft.org
-- Vice-President: vicepresident@pcft.wa.aft.org
-- Treasurer: treasurer@pcft.wa.aft.org
+- President: Lisa M. Murray (LMurray@pierce.ctc.edu)
+- Vice-President: Aaron Bluitt (ABluitt@pierce.ctc.edu)
 `;
 
 export const APP_TITLE = "Pierce College Federation of Teachers Contract Digital Assistant";

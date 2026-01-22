@@ -207,7 +207,7 @@ const App: React.FC = () => {
   };
 
   const emailExecBoard = () => {
-    const emails = "president@pcft.wa.aft.org,vicepresident@pcft.wa.aft.org,treasurer@pcft.wa.aft.org";
+    const emails = "LMurray@pierce.ctc.edu,ABluitt@pierce.ctc.edu";
     const subject = encodeURIComponent("Contract Inquiry via PCFT Assistant");
     window.location.href = `mailto:${emails}?subject=${subject}`;
     setShowContactMenu(false);
@@ -534,10 +534,10 @@ const App: React.FC = () => {
                   <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
-                  Email Executive Board
+                  Email President & VP
                 </button>
                 <div className="bg-gray-50 px-4 py-2 text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
-                  President, VP & Treasurer
+                  Lisa M. Murray & Aaron Bluitt
                 </div>
               </div>
             )}
