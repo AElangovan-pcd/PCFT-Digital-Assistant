@@ -4,6 +4,8 @@ import { MessageRole, ChatMessage, AppMode } from './types';
 import { GeminiService } from './services/geminiService';
 import { APP_TITLE, APP_SUBTITLE, PCFT_CONTRACT_CONTEXT } from './constants';
 import { GoogleGenAI, LiveServerMessage, Modality, Blob } from '@google/genai';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 // Audio Utility Functions
 function decode(base64: string) {
@@ -66,13 +68,28 @@ const App: React.FC = () => {
   const [showThinkingInfo, setShowThinkingInfo] = useState(false);
   const [showContactMenu, setShowContactMenu] = useState(false);
   const [isLiveActive, setIsLiveActive] = useState(false);
-  const [liveTranscription, setLiveTranscription] = useState('');
   
+  // Transcripts for the active turn in Live Mode
+  const [currentAiTranscript, setCurrentAiTranscript] = useState('');
+  const [currentUserTranscript, setCurrentUserTranscript] = useState('');
+  
+  // Accumulate full transcripts for the chat history
+  const activeAiTranscriptRef = useRef('');
+  const activeUserTranscriptRef = useRef('');
+  
+  // States
+  const [bookmarks, setBookmarks] = useState<ChatMessage[]>(() => {
+    const saved = localStorage.getItem('pcft_bookmarks');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showBookmarks, setShowBookmarks] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState<string | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const gemini = useRef(new GeminiService());
   const contactMenuRef = useRef<HTMLDivElement>(null);
 
-  // Live API Refs
+  // Live API & Audio Refs
   const audioContextRef = useRef<{ input: AudioContext; output: AudioContext } | null>(null);
   const nextStartTimeRef = useRef(0);
   const activeSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
@@ -85,19 +102,24 @@ const App: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom, liveTranscription]);
+  }, [messages, scrollToBottom, currentAiTranscript]);
 
   useEffect(() => {
     if (messages.length === 0) {
       setMessages([{
         id: '1',
         role: MessageRole.ASSISTANT,
-        content: "Welcome, colleague. I am your PCFT Contract Assistant. How can I help you understand your rights, workload, or the grievance procedure today?",
+        content: "Welcome, colleague. I am your **PCFT Digital Assistant**. \n\nHow can I help you understand your rights, workload, or the grievance procedure today?",
         timestamp: new Date()
       }]);
     }
   }, []);
 
+  useEffect(() => {
+    localStorage.setItem('pcft_bookmarks', JSON.stringify(bookmarks));
+  }, [bookmarks]);
+
+  // Close contact menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (contactMenuRef.current && !contactMenuRef.current.contains(event.target as Node)) {
@@ -107,6 +129,38 @@ const App: React.FC = () => {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  const toggleBookmark = (message: ChatMessage) => {
+    setBookmarks(prev => {
+      const exists = prev.find(b => b.id === message.id);
+      if (exists) {
+        return prev.filter(b => b.id !== message.id);
+      }
+      return [...prev, { ...message, isBookmarked: true }];
+    });
+    setMessages(prev => prev.map(m => m.id === message.id ? { ...m, isBookmarked: !m.isBookmarked } : m));
+  };
+
+  const handleTTS = async (message: ChatMessage) => {
+    if (isSpeaking === message.id) return;
+    setIsSpeaking(message.id);
+
+    const base64Audio = await gemini.current.generateSpeech(message.content);
+    if (base64Audio) {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      const audioBuffer = await decodeAudioData(decode(base64Audio), ctx, 24000, 1);
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      source.onended = () => {
+        setIsSpeaking(null);
+        ctx.close();
+      };
+      source.start();
+    } else {
+      setIsSpeaking(null);
+    }
+  };
 
   const handleSend = async (e?: React.FormEvent, customInput?: string) => {
     e?.preventDefault();
@@ -124,27 +178,39 @@ const App: React.FC = () => {
     if (!customInput) setInput('');
     setIsLoading(true);
 
+    const assistantId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, {
+      id: assistantId,
+      role: MessageRole.ASSISTANT,
+      content: '',
+      timestamp: new Date()
+    }]);
+
     try {
       const history = messages.slice(-10).map(m => ({
         role: m.role,
         content: m.content
       }));
       
-      const response = await gemini.current.generateTextResponse(query, history, isThinkingEnabled);
+      const stream = gemini.current.generateTextResponseStream(query, history, isThinkingEnabled);
+      let fullContent = '';
       
-      const assistantMessage: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: MessageRole.ASSISTANT,
-        content: response || "I'm sorry, I couldn't process that.",
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, assistantMessage]);
+      for await (const chunk of stream) {
+        fullContent += chunk;
+        setMessages(prev => prev.map(m => m.id === assistantId ? { ...m, content: fullContent } : m));
+      }
     } catch (err) {
       console.error(err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const emailExecBoard = () => {
+    const emails = "president@pcft.wa.aft.org,vicepresident@pcft.wa.aft.org,treasurer@pcft.wa.aft.org";
+    const subject = encodeURIComponent("Contract Inquiry via PCFT Assistant");
+    window.location.href = `mailto:${emails}?subject=${subject}`;
+    setShowContactMenu(false);
   };
 
   const startLiveMode = async () => {
@@ -180,7 +246,7 @@ const App: React.FC = () => {
             scriptProcessor.connect(inputCtx.destination);
           },
           onmessage: async (message: LiveServerMessage) => {
-            // Handle Audio Output
+            // 1. Handle Audio Playback
             const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
             if (base64Audio) {
               const outCtx = audioContextRef.current!.output;
@@ -200,25 +266,59 @@ const App: React.FC = () => {
               activeSourcesRef.current.add(source);
             }
 
-            // Handle Transcriptions
+            // 2. Handle AI Output Transcriptions (Captions)
             if (message.serverContent?.outputTranscription) {
-              setLiveTranscription(prev => prev + message.serverContent!.outputTranscription!.text);
+              const text = message.serverContent.outputTranscription.text;
+              activeAiTranscriptRef.current += text;
+              setCurrentAiTranscript(activeAiTranscriptRef.current);
             }
 
+            // 3. Handle User Input Transcriptions
+            if (message.serverContent?.inputTranscription) {
+              const text = message.serverContent.inputTranscription.text;
+              activeUserTranscriptRef.current += text;
+              setCurrentUserTranscript(activeUserTranscriptRef.current);
+            }
+
+            // 4. Handle Interruption
             if (message.serverContent?.interrupted) {
               activeSourcesRef.current.forEach(s => s.stop());
               activeSourcesRef.current.clear();
               nextStartTimeRef.current = 0;
             }
 
+            // 5. Handle Turn Complete (Store in Chat History)
             if (message.serverContent?.turnComplete) {
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                role: MessageRole.ASSISTANT,
-                content: "[Live Response Completed]",
-                timestamp: new Date()
-              }]);
-              setLiveTranscription('');
+              const finalUser = activeUserTranscriptRef.current;
+              const finalAi = activeAiTranscriptRef.current;
+              
+              const newMsgs: ChatMessage[] = [];
+              if (finalUser.trim()) {
+                newMsgs.push({
+                  id: Date.now().toString() + "-user",
+                  role: MessageRole.USER,
+                  content: finalUser.trim(),
+                  timestamp: new Date()
+                });
+              }
+              if (finalAi.trim()) {
+                newMsgs.push({
+                  id: (Date.now() + 1).toString() + "-ai",
+                  role: MessageRole.ASSISTANT,
+                  content: finalAi.trim(),
+                  timestamp: new Date()
+                });
+              }
+
+              if (newMsgs.length > 0) {
+                setMessages(prev => [...prev, ...newMsgs]);
+              }
+
+              // Reset buffers for next turn
+              activeAiTranscriptRef.current = '';
+              activeUserTranscriptRef.current = '';
+              setCurrentAiTranscript('');
+              setCurrentUserTranscript('');
             }
           },
           onerror: (e) => {
@@ -234,7 +334,7 @@ const App: React.FC = () => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
-          systemInstruction: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers. Use plain language for audio clarity.",
+          systemInstruction: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers.",
           outputAudioTranscription: {},
           inputAudioTranscription: {},
         }
@@ -262,7 +362,10 @@ const App: React.FC = () => {
       audioContextRef.current = null;
     }
     setIsLiveActive(false);
-    setLiveTranscription('');
+    setCurrentAiTranscript('');
+    setCurrentUserTranscript('');
+    activeAiTranscriptRef.current = '';
+    activeUserTranscriptRef.current = '';
     activeSourcesRef.current.forEach(s => s.stop());
     activeSourcesRef.current.clear();
   };
@@ -275,19 +378,10 @@ const App: React.FC = () => {
     }
   };
 
-  const emailExecBoard = () => {
-    const emails = "president@pcft.wa.aft.org,vicepresident@pcft.wa.aft.org,treasurer@pcft.wa.aft.org";
-    const subject = encodeURIComponent("Contract Inquiry via PCFT Assistant");
-    window.location.href = `mailto:${emails}?subject=${subject}`;
-    setShowContactMenu(false);
-  };
-
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden text-gray-900">
       {/* Sidebar */}
-      <aside 
-        className={`${isSidebarOpen ? 'w-80' : 'w-0'} bg-[#002B44] text-white transition-all duration-300 flex flex-col overflow-hidden shadow-2xl z-20`}
-      >
+      <aside className={`${isSidebarOpen ? 'w-80' : 'w-0'} bg-[#002B44] text-white transition-all duration-300 flex flex-col overflow-hidden shadow-2xl z-20`}>
         <div className="p-6 border-b border-blue-900 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-yellow-400 rounded-lg flex items-center justify-center shadow-inner">
@@ -304,39 +398,67 @@ const App: React.FC = () => {
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="space-y-1">
-            <h3 className="text-[11px] font-bold text-blue-400 uppercase tracking-widest px-2 mb-2">Contract Knowledge</h3>
-            {[
-              { label: "Faculty Load & Preps", q: "What is the faculty load, including maximum preparations and credit hours?" },
-              { label: "Class Size Limits", q: "What are the maximum class sizes for grounded and online courses?" },
-              { label: "Grievance Procedure", q: "Explain the grievance procedure as outlined in the PCFT collective bargaining agreement, detailing the steps, time limits, and required documentation." },
-              { label: "Sick Leave Policy", q: "How does sick leave work under the contract?" },
-              { label: "RIF Layoff Order", q: "What is the RIF layoff order for faculty?" }
-            ].map((item, idx) => (
+            <div className="flex items-center justify-between px-2 mb-2">
+              <h3 className="text-[11px] font-bold text-blue-400 uppercase tracking-widest">Contract Knowledge</h3>
               <button 
-                key={idx} 
-                className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-blue-800 transition-colors text-blue-100"
-                onClick={() => handleSend(undefined, item.q)}
+                onClick={() => setShowBookmarks(!showBookmarks)}
+                className={`p-1 rounded hover:bg-blue-800 transition-colors ${showBookmarks ? 'text-yellow-400' : 'text-blue-400'}`}
+                title="View Bookmarks"
               >
-                {item.label}
+                <svg className="w-4 h-4" fill={showBookmarks ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
               </button>
-            ))}
-          </div>
-
-          <div className="space-y-1 mt-8">
-            <h3 className="text-[11px] font-bold text-blue-400 uppercase tracking-widest px-2 mb-2">MOUs & Stipends</h3>
-            {[
-              { label: "High Demand Stipend", q: "Explain the High Demand/High Wage MOU" },
-              { label: "Nursing Stipend", q: "What are the details of the Nursing Faculty MOU?" },
-              { label: "Digital Accessibility", q: "Tell me about the Title II Accessibility stipend." }
-            ].map((item, idx) => (
-              <button 
-                key={idx} 
-                className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-blue-800 transition-colors text-blue-100"
-                onClick={() => handleSend(undefined, item.q)}
-              >
-                {item.label}
-              </button>
-            ))}
+            </div>
+            
+            {showBookmarks ? (
+              <div className="space-y-2 animate-in fade-in slide-in-from-left-2">
+                {bookmarks.length === 0 ? (
+                  <p className="px-2 text-[10px] italic text-blue-300">No bookmarks saved yet.</p>
+                ) : (
+                  bookmarks.map(b => (
+                    <div 
+                      key={b.id} 
+                      className="group p-3 bg-blue-900/20 border border-blue-800 rounded-lg hover:bg-blue-800/40 transition-all cursor-pointer relative"
+                      onClick={() => setMessages(prev => [...prev, b])}
+                    >
+                      <p className="text-xs text-blue-100 line-clamp-3 leading-relaxed">{b.content}</p>
+                      <button 
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-300"
+                        onClick={(e) => { e.stopPropagation(); toggleBookmark(b); }}
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))
+                )}
+                <button 
+                  onClick={() => setShowBookmarks(false)}
+                  className="w-full text-center py-2 text-[10px] text-blue-400 hover:text-white uppercase font-bold tracking-widest border-t border-blue-900 mt-2"
+                >
+                  Back to Topics
+                </button>
+              </div>
+            ) : (
+              [
+                { label: "Faculty Load & Preps", q: "What is the faculty load, including maximum preparations and credit hours?" },
+                { label: "Class Size Limits", q: "What are the maximum class sizes for grounded and online courses?" },
+                { label: "Grievance Procedure", q: "Explain the grievance procedure as outlined in the PCFT agreement." },
+                { label: "Sick Leave Policy", q: "How does sick leave work under the contract?" },
+                { label: "High Demand Stipend", q: "Explain the High Demand/High Wage MOU" },
+                { label: "Nursing Stipend", q: "What are the details of the Nursing Faculty MOU?" }
+              ].map((item, idx) => (
+                <button 
+                  key={idx} 
+                  className="w-full text-left px-3 py-2 text-sm rounded-md hover:bg-blue-800 transition-colors text-blue-100"
+                  onClick={() => handleSend(undefined, item.q)}
+                >
+                  {item.label}
+                </button>
+              ))
+            )}
           </div>
         </nav>
 
@@ -367,25 +489,21 @@ const App: React.FC = () => {
                 <strong>What is Thinking Mode?</strong>
                 <p className="mt-1 opacity-90 leading-relaxed">
                   Enables deep reasoning. The AI cross-references multiple articles and scenarios before responding. 
-                  Best for complex workload or legalistic grievance questions.
                 </p>
               </div>
             )}
           </div>
           
           <button 
-            className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:shadow-lg active:scale-95"
+            className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:shadow-lg active:scale-95 text-sm"
             onClick={() => window.open('https://pcft.wa.aft.org/grievance-form', '_blank')}
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
             File a Grievance
           </button>
 
           <div className="relative">
             <button 
-              className="w-full bg-yellow-500 hover:bg-yellow-400 text-[#003B5C] font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:shadow-lg active:scale-95"
+              className="w-full bg-yellow-500 hover:bg-yellow-400 text-[#003B5C] font-bold py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all hover:shadow-lg active:scale-95 text-sm"
               onClick={() => setShowContactMenu(!showContactMenu)}
             >
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -430,7 +548,7 @@ const App: React.FC = () => {
       {/* Main Area */}
       <main className="flex-1 flex flex-col relative bg-white">
         {/* Header */}
-        <header className="h-16 bg-white border-b flex items-center justify-between px-6 shrink-0 z-10">
+        <header className="h-16 bg-white border-b flex items-center justify-between px-6 shrink-0 z-10 shadow-sm">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -441,11 +559,11 @@ const App: React.FC = () => {
               </svg>
             </button>
             <div className="flex flex-col">
-              <h2 className="font-bold text-gray-800 tracking-tight">{APP_TITLE}</h2>
+              <h2 className="font-bold text-gray-800 tracking-tight leading-none mb-1">{APP_TITLE}</h2>
               <div className="flex items-center gap-1.5">
                  <span className={`w-1.5 h-1.5 rounded-full ${isLoading || isLiveActive ? 'bg-yellow-500 animate-pulse' : 'bg-green-500'}`}></span>
-                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
-                   {isLiveActive ? 'Live Audio Conversation' : isLoading ? (isThinkingEnabled ? 'Analyzing Contract Articles...' : 'Generating...') : 'System Ready'}
+                 <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+                   {isLiveActive ? 'Live Audio Session' : isLoading ? 'Contract Assistant Working...' : 'Verified Contract Data Active'}
                  </p>
               </div>
             </div>
@@ -459,10 +577,6 @@ const App: React.FC = () => {
                <div className={`w-2 h-2 rounded-full ${isLiveActive ? 'bg-white animate-ping' : 'bg-blue-600'}`}></div>
                {isLiveActive ? 'STOP LIVE MODE' : 'START LIVE MODE'}
              </button>
-             <div className="hidden md:flex flex-col items-end">
-                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">Current Contract</span>
-                <span className="text-xs text-blue-700 font-semibold">2024 - 2027 CBA</span>
-             </div>
           </div>
         </header>
 
@@ -473,8 +587,8 @@ const App: React.FC = () => {
               key={m.id} 
               className={`flex ${m.role === MessageRole.USER ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-4 duration-500`}
             >
-              <div className={`max-w-[90%] md:max-w-[75%] flex gap-4 ${m.role === MessageRole.USER ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-md
+              <div className={`max-w-[95%] md:max-w-[85%] lg:max-w-[75%] flex gap-4 ${m.role === MessageRole.USER ? 'flex-row-reverse' : ''}`}>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-md transition-transform hover:scale-105
                   ${m.role === MessageRole.USER ? 'bg-[#003B5C] text-white' : 'bg-white text-blue-700 border border-blue-100'}
                 `}>
                   {m.role === MessageRole.USER ? (
@@ -487,124 +601,132 @@ const App: React.FC = () => {
                     </svg>
                   )}
                 </div>
-                <div className={`p-5 rounded-2xl shadow-sm text-[15px] leading-relaxed
+                <div className={`relative group p-6 rounded-2xl shadow-sm
                   ${m.role === MessageRole.USER ? 'bg-[#003B5C] text-white rounded-tr-none' : 'bg-white text-gray-800 border border-gray-100 rounded-tl-none'}
                 `}>
-                   <div className="prose prose-blue max-w-none whitespace-pre-wrap font-medium">
-                      {m.content}
+                   {/* Actions (Bookmark & TTS) */}
+                   {m.role === MessageRole.ASSISTANT && (
+                     <div className="absolute -top-3 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => handleTTS(m)}
+                          className={`p-2 rounded-full shadow-lg border transition-all ${isSpeaking === m.id ? 'bg-blue-600 text-white animate-pulse' : 'bg-white text-blue-600 hover:bg-blue-50'}`}
+                          title="Read Aloud"
+                        >
+                           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                           </svg>
+                        </button>
+                        <button 
+                          onClick={() => toggleBookmark(m)}
+                          className={`p-2 rounded-full shadow-lg border transition-all ${m.isBookmarked || bookmarks.find(b => b.id === m.id) ? 'bg-yellow-400 text-white' : 'bg-white text-gray-400 hover:bg-gray-50'}`}
+                          title="Bookmark Response"
+                        >
+                           <svg className="w-3.5 h-3.5" fill={m.isBookmarked ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
+                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                           </svg>
+                        </button>
+                     </div>
+                   )}
+
+                   {/* Rich Text Content */}
+                   <div className="prose prose-blue max-w-none text-[15px] leading-relaxed">
+                      {m.role === MessageRole.USER ? (
+                        <p className="font-medium">{m.content}</p>
+                      ) : (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {m.content || "*(Generating contract analysis...)*"}
+                        </ReactMarkdown>
+                      )}
                    </div>
-                   <div className={`mt-3 text-[10px] font-bold uppercase tracking-widest opacity-40 ${m.role === MessageRole.USER ? 'text-right' : 'text-left'}`}>
+                   
+                   <div className={`mt-4 text-[9px] font-bold uppercase tracking-widest opacity-40 ${m.role === MessageRole.USER ? 'text-right' : 'text-left'}`}>
                      {m.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                    </div>
                 </div>
               </div>
             </div>
           ))}
-          
-          {isLiveActive && liveTranscription && (
-            <div className="flex justify-start animate-in fade-in duration-300">
-               <div className="flex gap-4 max-w-[75%]">
-                 <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-lg animate-pulse">
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                    </svg>
-                 </div>
-                 <div className="bg-blue-50 border border-blue-100 p-5 rounded-2xl rounded-tl-none text-blue-900 shadow-sm italic font-medium">
-                    {liveTranscription}...
-                 </div>
-               </div>
-            </div>
-          )}
-
-          {isLoading && !isLiveActive && (
-            <div className="flex justify-start">
-               <div className="bg-white border border-blue-50 rounded-2xl p-6 shadow-sm flex flex-col gap-3 max-w-[80%]">
-                 <div className="flex items-center gap-4">
-                   <div className="flex gap-1.5">
-                      <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-bounce"></div>
-                      <div className="w-2.5 h-2.5 bg-blue-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                      <div className="w-2.5 h-2.5 bg-blue-200 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                   </div>
-                   {isThinkingEnabled && (
-                     <span className="text-xs font-bold text-blue-600 uppercase tracking-widest animate-pulse">
-                       Reasoning through contract clauses...
-                     </span>
-                   )}
-                 </div>
-                 {isThinkingEnabled && (
-                   <div className="text-[11px] text-gray-500 italic border-t pt-2 border-gray-50">
-                     Verifying Article 16 grievance timelines and Article 7 workload maximums to ensure a precise answer.
-                   </div>
-                 )}
-               </div>
-            </div>
-          )}
           <div ref={messagesEndRef} />
         </div>
 
         {/* Input Area */}
         <div className="p-6 bg-white border-t border-gray-100">
           {isLiveActive ? (
-            <div className="max-w-4xl mx-auto flex flex-col items-center gap-4 py-4 animate-in zoom-in duration-300">
+            <div className="max-w-4xl mx-auto flex flex-col items-center gap-6 py-6 animate-in zoom-in duration-300">
               <div className="relative">
                  <div className="absolute inset-0 bg-blue-500 rounded-full animate-ping opacity-25"></div>
-                 <div className="relative w-20 h-20 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-2xl">
-                    <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <div className="relative w-24 h-24 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-2xl">
+                    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                     </svg>
                  </div>
               </div>
-              <p className="text-sm font-bold text-blue-600 uppercase tracking-widest animate-pulse">Live Session Active - Speaking Allowed</p>
-              <button 
-                onClick={stopLiveMode}
-                className="bg-red-500 text-white px-8 py-2 rounded-full font-bold hover:bg-red-600 transition-colors shadow-lg"
-              >
-                End Live Conversation
-              </button>
+
+              {/* LIVE CAPTIONS OVERLAY */}
+              <div className="w-full max-w-2xl bg-[#001D2D]/90 backdrop-blur-md rounded-2xl p-6 border border-blue-900/50 shadow-2xl min-h-[160px] flex flex-col items-center justify-center text-center">
+                 {currentAiTranscript ? (
+                   <div className="animate-in fade-in slide-in-from-bottom-2">
+                     <p className="text-blue-400 text-[10px] uppercase font-bold tracking-widest mb-2">AI Speaking</p>
+                     <p className="text-white text-xl font-medium leading-relaxed italic">
+                       "{currentAiTranscript}"
+                     </p>
+                   </div>
+                 ) : currentUserTranscript ? (
+                   <div className="animate-in fade-in slide-in-from-bottom-2">
+                     <p className="text-green-400 text-[10px] uppercase font-bold tracking-widest mb-2">Listening to You</p>
+                     <p className="text-gray-300 text-lg font-medium leading-relaxed">
+                       {currentUserTranscript}...
+                     </p>
+                   </div>
+                 ) : (
+                   <p className="text-gray-500 text-sm font-medium tracking-wide animate-pulse">
+                     Speak clearly. The digital assistant is listening...
+                   </p>
+                 )}
+              </div>
+
+              <div className="flex gap-4">
+                <button 
+                  onClick={stopLiveMode}
+                  className="bg-red-500 text-white px-10 py-3 rounded-full font-bold hover:bg-red-600 transition-all shadow-lg hover:scale-105 active:scale-95"
+                >
+                  End Session
+                </button>
+              </div>
             </div>
           ) : (
-            <>
-              <form 
-                onSubmit={handleSend}
-                className="max-w-4xl mx-auto flex items-center gap-4 bg-white border-2 border-gray-100 rounded-2xl p-2 focus-within:border-blue-500 transition-all shadow-lg"
+            <form 
+              onSubmit={handleSend}
+              className="max-w-4xl mx-auto flex items-center gap-4 bg-white border-2 border-gray-100 rounded-2xl p-2 focus-within:border-blue-500 transition-all shadow-lg"
+            >
+              <button 
+                type="button"
+                onClick={toggleLive}
+                className="p-3 rounded-xl transition-all hover:bg-gray-100 text-gray-400"
+                title="Toggle Live Audio Mode"
               >
-                <button 
-                  type="button"
-                  onClick={toggleLive}
-                  className={`p-3 rounded-xl transition-all ${mode === AppMode.VOICE ? 'bg-red-50 text-red-600 scale-110' : 'hover:bg-gray-100 text-gray-400'}`}
-                  title="Toggle Live Audio Mode"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                  </svg>
-                </button>
-                <input 
-                  type="text"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask a contract question... (e.g., 'What is the grievance timeline?')"
-                  className="flex-1 bg-transparent border-none focus:ring-0 text-gray-700 font-medium py-3 px-2 placeholder:text-gray-400"
-                />
-                <button 
-                  type="submit"
-                  disabled={!input.trim() || isLoading}
-                  className="bg-[#003B5C] hover:bg-blue-800 disabled:opacity-30 text-white px-6 py-3 rounded-xl shadow-md transition-all active:scale-95 font-bold flex items-center gap-2"
-                >
-                  <span>Ask</span>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7m0 0l-7 7m7-7H3" />
-                  </svg>
-                </button>
-              </form>
-              <div className="flex justify-center gap-6 mt-4">
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">
-                  Exclusively PCFT Data
-                </p>
-                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]">
-                  Union Member Confidentiality
-                </p>
-              </div>
-            </>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                </svg>
+              </button>
+              <input 
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask about your rights or workload..."
+                className="flex-1 bg-transparent border-none focus:ring-0 text-gray-700 font-medium py-3 px-2 placeholder:text-gray-400"
+              />
+              <button 
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className="bg-[#003B5C] hover:bg-blue-800 disabled:opacity-30 text-white px-6 py-3 rounded-xl shadow-md transition-all active:scale-95 font-bold flex items-center gap-2"
+              >
+                <span>Ask</span>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              </button>
+            </form>
           )}
         </div>
       </main>

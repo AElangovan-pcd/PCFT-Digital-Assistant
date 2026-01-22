@@ -10,12 +10,12 @@ export interface ChatMessage {
   role: MessageRole;
   content: string;
   timestamp: Date;
+  isBookmarked?: boolean;
 }
 
-export interface ContractSection {
-  title: string;
-  id: string;
-  content: string;
+export interface SearchResult {
+  text: string;
+  context: string;
 }
 
 export enum AppMode {
