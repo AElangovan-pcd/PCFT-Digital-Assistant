@@ -213,9 +213,12 @@ const App: React.FC = () => {
   };
 
   const startLiveMode = async () => {
+    if (!requireApiKey()) return;
     try {
       setIsLoading(true);
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+      const storedKey = localStorage.getItem('gemini_api_key');
+      const apiKey = storedKey || process.env.GEMINI_API_KEY || '';
+      const ai = new GoogleGenAI({ apiKey });
       
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -333,7 +336,7 @@ const App: React.FC = () => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
-          systemInstruction: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers.",
+          systemInstruction: { parts: [{ text: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers." }] },
           outputAudioTranscription: {},
           inputAudioTranscription: {},
         }
