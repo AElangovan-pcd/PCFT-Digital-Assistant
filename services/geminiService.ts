@@ -15,7 +15,7 @@ export class GeminiService {
       const apiKey = storedKey || process.env.API_KEY || '';
       const aiInstance = new GoogleGenAI({ apiKey });
       
-      const modelName = useThinking ? 'gemini-2.0-flash-thinking-exp-01-21' : 'gemini-2.0-flash';
+      const modelName = useThinking ? 'gemini-1.5-pro' : 'gemini-1.5-flash';
       
       const responseStream = await aiInstance.models.generateContentStream({
         model: modelName,
@@ -39,7 +39,6 @@ export class GeminiService {
           8. Output strictly in Markdown format for rich text rendering.
           `,
           temperature: 0.2, // Lower temperature for higher precision
-          ...(useThinking ? { thinkingConfig: { thinkingBudget: 4000 } } : {})
         },
       });
 
