@@ -54,11 +54,11 @@ if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
   
   // Catch-all to serve index.html for React Router / SPA navigation
-  app.get('(.*)', (req, res) => {
+  app.get(/.*/, (req, res) => {
     res.sendFile(path.join(distPath, 'index.html'));
   });
 } else {
-  app.get('(.*)', (req, res) => {
+  app.get(/.*/, (req, res) => {
     res.send('The "dist" folder was not found. Please run "npm run build" to build the frontend.');
   });
 }
