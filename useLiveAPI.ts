@@ -6,7 +6,7 @@ import { SYSTEM_INSTRUCTION } from './knowledge_base';
 export function useLiveAPI() {
     const [isConnected, setIsConnected] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
-    const [transcript, setTranscript] = useState<{role: string, text: string}[]>([]);
+    const [transcript, setTranscript] = useState<{role: string, text: string, finished: boolean}[]>([]);
     
     const sessionRef = useRef<any>(null); // from ai.live.connect
     const audioContextRef = useRef<AudioContext | null>(null);
@@ -17,8 +17,17 @@ export function useLiveAPI() {
     const playbackContextRef = useRef<AudioContext | null>(null);
     const nextPlaybackTimeRef = useRef<number>(0);
 
-    const addTranscript = (role: string, text: string) => {
-        setTranscript(prev => [...prev, { role, text }]);
+    const addTranscript = (role: string, text: string, finished: boolean) => {
+        setTranscript(prev => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === role && !last.finished) {
+                // If the previous chunk isn't finished, we append the new text
+                const updated = [...prev];
+                updated[updated.length - 1] = { role, text: last.text + (last.text.endsWith(' ') ? '' : ' ') + text, finished };
+                return updated;
+            }
+            return [...prev, { role, text, finished }];
+        });
     };
 
     const stopAudio = useCallback(() => {
@@ -74,8 +83,12 @@ export function useLiveAPI() {
             const processor = audioCtx.createScriptProcessor(4096, 1, 1);
             processorRef.current = processor;
 
+            const gainNode = audioCtx.createGain();
+            gainNode.gain.value = 0;
+
             source.connect(processor);
-            processor.connect(audioCtx.destination);
+            processor.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
 
             const sessionPromise = ai.live.connect({
                 model: "gemini-2.0-flash-exp",
@@ -151,15 +164,18 @@ export function useLiveAPI() {
                             }
                         }
 
-                        /* 
-                          Wait, how to get the transcription? 
-                          We enabled it in config, could be in serverContent
-                          Wait, if there's no modelTurn, check for transcription or just let it be audio only.
-                          Since we are a Voice Assistant, maybe we don't need transcription right now. 
-                        */
+                        if (message.serverContent?.inputTranscription?.text) {
+                            const isFinished = message.serverContent.inputTranscription.finished ?? true;
+                            addTranscript('user', message.serverContent.inputTranscription.text, isFinished);
+                        }
+                        if (message.serverContent?.outputTranscription?.text) {
+                            const isFinished = message.serverContent.outputTranscription.finished ?? true;
+                            addTranscript('model', message.serverContent.outputTranscription.text, isFinished);
+                        }
                     },
                     onerror: (e) => {
                         console.error('Live API Error:', e);
+                        alert('Live API WebSocket Error: ' + JSON.stringify(e));
                         disconnect();
                     },
                     onclose: () => {
@@ -172,12 +188,15 @@ export function useLiveAPI() {
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
                     },
+                    inputAudioTranscription: {},
+                    outputAudioTranscription: {},
                     systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION + "\n\nCRITICAL: the user is speaking to you using voice right now. Provide clear, concise, conversational spoken-style answers — avoid tables or complex formatting. Keep your responses short like a real conversation. Only elaborate if the user asks." }] },
                 },
             });
             sessionRef.current = await sessionPromise;
-        } catch (err) {
+        } catch (err: any) {
             console.error('Connection failed', err);
+            alert("Live Mode Error: " + (err.message || 'Unknown connection error. Please check your API Key.'));
             disconnect();
         }
     }, [disconnect]);
@@ -186,6 +205,7 @@ export function useLiveAPI() {
         connect,
         disconnect,
         isConnected,
-        isConnecting
+        isConnecting,
+        transcript
     };
 }

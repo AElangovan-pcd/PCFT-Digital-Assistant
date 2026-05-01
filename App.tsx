@@ -16,7 +16,7 @@ export default function App() {
   
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const { connect: connectLive, disconnect: disconnectLive, isConnected: isLiveConnected, isConnecting: isLiveConnecting } = useLiveAPI();
+  const { connect: connectLive, disconnect: disconnectLive, isConnected: isLiveConnected, isConnecting: isLiveConnecting, transcript } = useLiveAPI();
 
   useEffect(() => {
     // Initial greeting
@@ -27,7 +27,7 @@ export default function App() {
     if (bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages]);
+  }, [messages, transcript]);
 
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -155,6 +155,30 @@ export default function App() {
                 <div className="text-center">
                   <h2 className="text-2xl font-bold tracking-tight text-slate-800 mb-2">Live Voice Mode Active</h2>
                   <p className="text-slate-500 px-4 max-w-md">I am listening. Feel free to ask me anything about the PCFT agreement or your faculty rights.</p>
+                </div>
+                
+                {/* Closed Captioning */}
+                <div className="w-full max-w-2xl mt-8">
+                  <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl shadow-sm h-64 overflow-y-auto p-4 flex flex-col space-y-4">
+                    {transcript.length === 0 ? (
+                      <div className="flex-1 flex items-center justify-center text-slate-400 italic">
+                        Start speaking...
+                      </div>
+                    ) : (
+                      transcript.map((msg, i) => (
+                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`rounded-2xl px-4 py-2 max-w-[80%] ${
+                            msg.role === 'user' 
+                             ? 'bg-slate-800 text-white rounded-br-sm' 
+                             : 'bg-blue-50 text-slate-800 border border-blue-100 rounded-bl-sm'
+                          }`}>
+                            <p className="text-sm font-medium">{msg.text}</p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    <div ref={bottomRef} />
+                  </div>
                 </div>
              </motion.div>
           </div>
