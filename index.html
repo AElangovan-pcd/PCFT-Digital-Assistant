@@ -4,24 +4,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pierce College Federation of Teachers Contract Digital Assistant</title>
+    <title>PCFT Contract Digital Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Inter', sans-serif; }
-        /* Custom styles for professional rich text rendering */
-        .prose h1, .prose h2, .prose h3 { color: #002B44; font-weight: 700; margin-top: 1em; margin-bottom: 0.5em; }
-        .prose p { margin-bottom: 0.75em; line-height: 1.6; }
-        .prose ul, .prose ol { margin-bottom: 1em; padding-left: 1.5em; }
-        .prose li { margin-bottom: 0.25em; }
+        .prose h1, .prose h2, .prose h3 { color: #002B44; font-weight: 700; margin-top: 1.2em; margin-bottom: 0.6em; }
+        .prose p { margin-bottom: 0.8em; line-height: 1.6; }
+        .prose ul, .prose ol { margin-bottom: 1.2em; padding-left: 1.5em; }
+        .prose li { margin-bottom: 0.4em; }
         .prose strong { color: #003B5C; font-weight: 700; }
-        .prose a { color: #2563eb; text-decoration: underline; }
+        .prose a { color: #2563eb; text-decoration: underline; transition: opacity 0.2s; }
+        .prose a:hover { opacity: 0.8; }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
     </style>
-<script type="module" src="/index.tsx"></script>
+<script type="importmap">
+{
+  "imports": {
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react-markdown": "https://esm.sh/react-markdown@^10.1.0",
+    "remark-gfm": "https://esm.sh/remark-gfm@^4.0.1"
+  }
+}
+</script>
 </head>
 <body class="bg-gray-50 overflow-hidden">
     <div id="root"></div>
+    <script type="module" src="./index.tsx"></script>
 </body>
 </html>

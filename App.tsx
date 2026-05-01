@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MessageRole, ChatMessage, AppMode } from './types';
 import { GeminiService } from './services/geminiService';
@@ -96,19 +95,6 @@ const App: React.FC = () => {
   const sessionRef = useRef<any>(null);
   const liveStreamRef = useRef<MediaStream | null>(null);
 
-  const requireApiKey = () => {
-    let key = localStorage.getItem('gemini_api_key') || process.env.API_KEY;
-    if (!key) {
-      key = window.prompt("A Gemini API Key is required. Please enter it:");
-      if (key) {
-        localStorage.setItem('gemini_api_key', key);
-      } else {
-        alert("API Key is required to use this feature.");
-      }
-    }
-    return !!key;
-  };
-
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -155,7 +141,6 @@ const App: React.FC = () => {
   };
 
   const handleTTS = async (message: ChatMessage) => {
-    if (!requireApiKey()) return;
     if (isSpeaking === message.id) return;
     setIsSpeaking(message.id);
 
@@ -178,7 +163,6 @@ const App: React.FC = () => {
 
   const handleSend = async (e?: React.FormEvent, customInput?: string) => {
     e?.preventDefault();
-    if (!requireApiKey()) return;
     const query = customInput || input;
     if (!query.trim() || isLoading) return;
 
@@ -229,12 +213,9 @@ const App: React.FC = () => {
   };
 
   const startLiveMode = async () => {
-    if (!requireApiKey()) return;
     try {
       setIsLoading(true);
-      const storedKey = localStorage.getItem('gemini_api_key');
-      const apiKey = storedKey || process.env.API_KEY || '';
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
       
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -244,7 +225,7 @@ const App: React.FC = () => {
       liveStreamRef.current = stream;
 
       const sessionPromise = ai.live.connect({
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
         callbacks: {
           onopen: () => {
             setIsLiveActive(true);
@@ -265,7 +246,7 @@ const App: React.FC = () => {
           },
           onmessage: async (message: LiveServerMessage) => {
             // 1. Handle Audio Playback
-            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
+            const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
               const outCtx = audioContextRef.current!.output;
               nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outCtx.currentTime);
@@ -352,7 +333,7 @@ const App: React.FC = () => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
-          systemInstruction: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers.",
+          systemInstruction: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers based on the contract.",
           outputAudioTranscription: {},
           inputAudioTranscription: {},
         }
@@ -465,8 +446,8 @@ const App: React.FC = () => {
                 { label: "Class Size Limits", q: "What are the maximum class sizes for grounded and online courses?" },
                 { label: "Grievance Procedure", q: "Explain the grievance procedure as outlined in the PCFT agreement." },
                 { label: "Sick Leave Policy", q: "How does sick leave work under the contract?" },
-                { label: "High Demand Stipend", q: "Explain the High Demand/High Wage MOU" },
-                { label: "Nursing Stipend", q: "What are the details of the Nursing Faculty MOU?" }
+                { label: "Faculty Emeritus", q: "What rights do emeritus faculty have?" },
+                { label: "Salary Placement", q: "How is initial salary placement determined?" }
               ].map((item, idx) => (
                 <button 
                   key={idx} 
@@ -571,6 +552,7 @@ const App: React.FC = () => {
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
               className="p-2 hover:bg-gray-100 rounded-lg text-gray-500 transition-colors"
+              aria-label="Toggle Sidebar"
             >
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
@@ -588,15 +570,6 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-4">
-             <button
-               onClick={() => {
-                 const key = window.prompt("Enter Gemini API Key:", localStorage.getItem('gemini_api_key') || '');
-                 if (key !== null) localStorage.setItem('gemini_api_key', key);
-               }}
-               className="px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded hover:bg-gray-50 transition-colors shadow-sm"
-             >
-               Set API Key
-             </button>
              <button 
               onClick={toggleLive}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${isLiveActive ? 'bg-red-500 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
@@ -661,7 +634,7 @@ const App: React.FC = () => {
                         <p className="font-medium">{m.content}</p>
                       ) : (
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {m.content || "*(Generating contract analysis...)*"}
+                          {m.content || "*(Analyzing contract...)*"}
                         </ReactMarkdown>
                       )}
                    </div>
@@ -692,8 +665,8 @@ const App: React.FC = () => {
               {/* LIVE CAPTIONS OVERLAY */}
               <div className="w-full max-w-2xl bg-[#001D2D]/90 backdrop-blur-md rounded-2xl p-6 border border-blue-900/50 shadow-2xl min-h-[160px] flex flex-col items-center justify-center text-center">
                  {currentAiTranscript ? (
-                   <div className="animate-in fade-in slide-in-from-bottom-2">
-                     <p className="text-blue-400 text-[10px] uppercase font-bold tracking-widest mb-2">AI Speaking</p>
+                   <div className="animate-in fade-in slide-in-from-bottom-2" aria-live="polite">
+                     <p className="text-blue-400 text-[10px] uppercase font-bold tracking-widest mb-2">AI Assistant Speaking</p>
                      <p className="text-white text-xl font-medium leading-relaxed italic">
                        "{currentAiTranscript}"
                      </p>
@@ -729,10 +702,10 @@ const App: React.FC = () => {
               <button 
                 type="button"
                 onClick={toggleLive}
-                className="p-3 rounded-xl transition-all hover:bg-gray-100 text-gray-400"
+                className="p-3 rounded-xl transition-all hover:bg-gray-100 text-gray-400 group"
                 title="Toggle Live Audio Mode"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 group-hover:text-blue-600 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
                 </svg>
               </button>
@@ -740,7 +713,7 @@ const App: React.FC = () => {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about your rights or workload..."
+                placeholder="Ask about contract details, workload, or benefits..."
                 className="flex-1 bg-transparent border-none focus:ring-0 text-gray-700 font-medium py-3 px-2 placeholder:text-gray-400"
               />
               <button 
@@ -748,10 +721,12 @@ const App: React.FC = () => {
                 disabled={!input.trim() || isLoading}
                 className="bg-[#003B5C] hover:bg-blue-800 disabled:opacity-30 text-white px-6 py-3 rounded-xl shadow-md transition-all active:scale-95 font-bold flex items-center gap-2"
               >
-                <span>Ask</span>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
+                <span>{isLoading ? 'Thinking...' : 'Ask'}</span>
+                {!isLoading && (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                )}
               </button>
             </form>
           )}

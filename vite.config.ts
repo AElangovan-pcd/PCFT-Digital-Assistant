@@ -1,24 +1,26 @@
-import path from 'path';
-import { defineConfig, loadEnv } from 'vite';
+
+import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, '.', '');
-    return {
-      base: '/PCFT-Digital-Assistant/',
-      server: {
-        port: 3000,
-        host: '0.0.0.0',
-      },
-      plugins: [react()],
-      define: {
-        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
-      },
-      resolve: {
-        alias: {
-          '@': path.resolve(__dirname, '.'),
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  // Use relative base path to ensure the app works on GitHub Pages subpaths
+  base: './',
+  define: {
+    // Bridges the environment variable from build-time to browser runtime
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
+  },
+  build: {
+    outDir: 'dist',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', '@google/genai'],
+          markdown: ['react-markdown', 'remark-gfm']
         }
       }
-    };
+    }
+  }
 });
