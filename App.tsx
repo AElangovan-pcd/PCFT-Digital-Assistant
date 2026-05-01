@@ -225,7 +225,7 @@ const App: React.FC = () => {
       liveStreamRef.current = stream;
 
       const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-latest',
+        model: 'gemini-2.0-flash-exp',
         callbacks: {
           onopen: () => {
             setIsLiveActive(true);
@@ -333,7 +333,7 @@ const App: React.FC = () => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
-          systemInstruction: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers based on the contract.",
+          systemInstruction: { parts: [{ text: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers." }] },
           outputAudioTranscription: {},
           inputAudioTranscription: {},
         }
