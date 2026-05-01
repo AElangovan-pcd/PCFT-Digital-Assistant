@@ -12,7 +12,7 @@ export class GeminiService {
   ) {
     try {
       // Re-initialize for each stream to ensure the latest API key is used if it changes
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       
       const responseStream = await ai.models.generateContentStream({
         model: 'gemini-3-pro-preview',
@@ -54,7 +54,7 @@ export class GeminiService {
 
   async generateSpeech(text: string): Promise<string | null> {
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: `Read this contract information clearly and professionally. Content: ${text}` }] }],

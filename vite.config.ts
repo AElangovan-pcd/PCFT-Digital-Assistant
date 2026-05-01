@@ -9,7 +9,7 @@ export default defineConfig({
   base: './',
   define: {
     // Bridges the environment variable from build-time to browser runtime
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
+    'process.env.GEMINI_API_KEY': JSON.stringify(process.env.GEMINI_API_KEY || process.env.API_KEY || '')
   },
   build: {
     outDir: 'dist',
