@@ -16,7 +16,7 @@ export class GeminiService {
       const aiInstance = new GoogleGenAI({ apiKey });
       
       const responseStream = await aiInstance.models.generateContentStream({
-        model: 'gemini-2.5-pro',
+        model: 'gemini-1.5-pro',
         contents: [
           ...history.map(h => ({
             role: h.role === 'assistant' ? 'model' : 'user',
@@ -56,7 +56,7 @@ export class GeminiService {
       const apiKey = storedKey || process.env.API_KEY || '';
       const aiInstance = new GoogleGenAI({ apiKey });
       const response = await aiInstance.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-1.5-flash",
         contents: [{ parts: [{ text: `Read this contract information clearly and professionally. Break complex info into shorter sentences. Use verbal signposting like 'First', 'Additionally', 'Most importantly'. Speak section numbers clearly (e.g. Article Five, Section Three Point Two). Content: ${text}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],

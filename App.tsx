@@ -97,7 +97,7 @@ const App: React.FC = () => {
   const liveStreamRef = useRef<MediaStream | null>(null);
 
   const requireApiKey = () => {
-    let key = localStorage.getItem('gemini_api_key');
+    let key = localStorage.getItem('gemini_api_key') || process.env.API_KEY;
     if (!key) {
       key = window.prompt("A Gemini API Key is required. Please enter it:");
       if (key) {
@@ -244,7 +244,7 @@ const App: React.FC = () => {
       liveStreamRef.current = stream;
 
       const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash',
+        model: 'gemini-2.0-flash-exp',
         callbacks: {
           onopen: () => {
             setIsLiveActive(true);
