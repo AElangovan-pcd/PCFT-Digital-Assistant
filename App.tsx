@@ -215,7 +215,7 @@ const App: React.FC = () => {
   const startLiveMode = async () => {
     try {
       setIsLoading(true);
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -237,7 +237,7 @@ const App: React.FC = () => {
               const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
               const pcmBlob = createBlob(inputData);
               sessionPromise.then((session) => {
-                session.sendRealtimeInput({ media: pcmBlob });
+                session.sendRealtimeInput({ audio: pcmBlob });
               });
             };
             
@@ -325,7 +325,7 @@ const App: React.FC = () => {
             stopLiveMode();
           },
           onclose: () => {
-            setIsLiveActive(false);
+            stopLiveMode();
           }
         },
         config: {
@@ -333,7 +333,7 @@ const App: React.FC = () => {
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
           },
-          systemInstruction: { parts: [{ text: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers." }] },
+          systemInstruction: PCFT_CONTRACT_CONTEXT + "\nYou are in LIVE MODE. Provide short, concise verbal answers.",
           outputAudioTranscription: {},
           inputAudioTranscription: {},
         }
