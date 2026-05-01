@@ -78,7 +78,7 @@ export function useLiveAPI() {
             processor.connect(audioCtx.destination);
 
             const sessionPromise = ai.live.connect({
-                model: "gemini-3.1-flash-live-preview",
+                model: "gemini-2.0-flash-exp",
                 callbacks: {
                     onopen: () => {
                         setIsConnecting(false);
