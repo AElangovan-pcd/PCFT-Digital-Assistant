@@ -6,11 +6,25 @@ let genAIClient: GoogleGenAI | null = null;
 export function getAI() {
   if (!genAIClient) {
     const storedKey = localStorage.getItem('gemini_api_key');
-    const apiKey = storedKey || process.env.GEMINI_API_KEY || '';
-    if (!apiKey) {
+    const isGithubPages = window.location.hostname.includes('github.io');
+    
+    // If on GitHub Pages, force BYOK
+    if (isGithubPages && !storedKey) {
       throw new Error("API Key not found. Please click 'Set API Key' in the top right to enter your key.");
     }
-    genAIClient = new GoogleGenAI({ apiKey });
+
+    const apiKey = storedKey || 'proxy-key'; // 'proxy-key' is a placeholder for the backend to replace
+    
+    const config: any = { apiKey };
+    
+    // If we are NOT on GitHub Pages (e.g. Render), route all traffic through our own backend proxy
+    if (!isGithubPages) {
+      config.httpOptions = {
+        baseUrl: window.location.origin
+      };
+    }
+    
+    genAIClient = new GoogleGenAI(config);
   }
   return genAIClient;
 }
