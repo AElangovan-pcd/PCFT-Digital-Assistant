@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.custom-md p {
+    margin-bottom: 0.75rem;
+}
+.custom-md p:last-child {
+    margin-bottom: 0;
+}
+.custom-md ul {
+    list-style-type: disc;
+    padding-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+.custom-md ol {
+    list-style-type: decimal;
+    padding-left: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+.custom-md li {
+    margin-bottom: 0.25rem;
+}
+.custom-md strong {
+    font-weight: 600;
+}
+.custom-md h3, .custom-md h4 {
+    font-weight: 600;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+.custom-md code {
+    background-color: #f1f5f9;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-size: 0.875em;
+}
