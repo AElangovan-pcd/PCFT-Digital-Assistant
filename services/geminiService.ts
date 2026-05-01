@@ -11,7 +11,9 @@ export class GeminiService {
     useThinking: boolean = true
   ) {
     try {
-      const aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const storedKey = localStorage.getItem('gemini_api_key');
+      const apiKey = storedKey || process.env.API_KEY || '';
+      const aiInstance = new GoogleGenAI({ apiKey });
       
       const responseStream = await aiInstance.models.generateContentStream({
         model: 'gemini-3-pro-preview',
@@ -50,7 +52,9 @@ export class GeminiService {
 
   async generateSpeech(text: string): Promise<string | null> {
     try {
-      const aiInstance = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const storedKey = localStorage.getItem('gemini_api_key');
+      const apiKey = storedKey || process.env.API_KEY || '';
+      const aiInstance = new GoogleGenAI({ apiKey });
       const response = await aiInstance.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: `Read this contract information clearly and professionally. Break complex info into shorter sentences. Use verbal signposting like 'First', 'Additionally', 'Most importantly'. Speak section numbers clearly (e.g. Article Five, Section Three Point Two). Content: ${text}` }] }],

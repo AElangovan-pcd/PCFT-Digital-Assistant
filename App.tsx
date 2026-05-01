@@ -96,6 +96,19 @@ const App: React.FC = () => {
   const sessionRef = useRef<any>(null);
   const liveStreamRef = useRef<MediaStream | null>(null);
 
+  const requireApiKey = () => {
+    let key = localStorage.getItem('gemini_api_key');
+    if (!key) {
+      key = window.prompt("A Gemini API Key is required. Please enter it:");
+      if (key) {
+        localStorage.setItem('gemini_api_key', key);
+      } else {
+        alert("API Key is required to use this feature.");
+      }
+    }
+    return !!key;
+  };
+
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -142,6 +155,7 @@ const App: React.FC = () => {
   };
 
   const handleTTS = async (message: ChatMessage) => {
+    if (!requireApiKey()) return;
     if (isSpeaking === message.id) return;
     setIsSpeaking(message.id);
 
@@ -164,6 +178,7 @@ const App: React.FC = () => {
 
   const handleSend = async (e?: React.FormEvent, customInput?: string) => {
     e?.preventDefault();
+    if (!requireApiKey()) return;
     const query = customInput || input;
     if (!query.trim() || isLoading) return;
 
@@ -214,9 +229,12 @@ const App: React.FC = () => {
   };
 
   const startLiveMode = async () => {
+    if (!requireApiKey()) return;
     try {
       setIsLoading(true);
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+      const storedKey = localStorage.getItem('gemini_api_key');
+      const apiKey = storedKey || process.env.API_KEY || '';
+      const ai = new GoogleGenAI({ apiKey });
       
       const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -570,6 +588,15 @@ const App: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-4">
+             <button
+               onClick={() => {
+                 const key = window.prompt("Enter Gemini API Key:", localStorage.getItem('gemini_api_key') || '');
+                 if (key !== null) localStorage.setItem('gemini_api_key', key);
+               }}
+               className="px-3 py-1.5 text-xs font-semibold text-gray-500 border border-gray-200 rounded hover:bg-gray-50 transition-colors shadow-sm"
+             >
+               Set API Key
+             </button>
              <button 
               onClick={toggleLive}
               className={`flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold transition-all shadow-sm ${isLiveActive ? 'bg-red-500 text-white' : 'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}
