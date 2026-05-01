@@ -33,7 +33,8 @@ export class GeminiService {
           5. Keep paragraphs concise (1-2 sentences max). Do not give too elaborate answers.
           6. Use bullet points for lists.
           7. End with: "Any follow-ups? Access the grievance form via your reps."
-          8. Output strictly in Markdown format for rich text rendering.
+          8. NEVER provide "Action Guidance" or "Application" sections unless explicitly requested.
+          9. Output strictly in Markdown format for rich text rendering.
           `,
           temperature: 0.2,
           thinkingConfig: useThinking ? { thinkingBudget: 4000 } : { thinkingBudget: 0 }
@@ -48,7 +49,7 @@ export class GeminiService {
       }
     } catch (error: any) {
       console.error("Gemini Streaming Error:", error);
-      yield "I apologize, but I encountered an error processing your request. Please ensure your API key is configured correctly in the repository secrets.";
+      yield "I apologize, but I encountered an error processing your request. Please ensure your API key or other configuration is correct.";
     }
   }
 
@@ -56,7 +57,7 @@ export class GeminiService {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "gemini-2.5-flash",
         contents: [{ parts: [{ text: `Read this contract information clearly and professionally. Content: ${text}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
