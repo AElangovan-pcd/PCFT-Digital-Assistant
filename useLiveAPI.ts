@@ -188,8 +188,6 @@ export function useLiveAPI() {
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
                     },
-                    inputAudioTranscription: {},
-                    outputAudioTranscription: {},
                     systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION + "\n\nCRITICAL: the user is speaking to you using voice right now. Provide clear, concise, conversational spoken-style answers — avoid tables or complex formatting. Keep your responses short like a real conversation. Only elaborate if the user asks." }] },
                 },
             });
