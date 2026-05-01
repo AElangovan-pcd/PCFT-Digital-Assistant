@@ -244,7 +244,7 @@ const App: React.FC = () => {
       liveStreamRef.current = stream;
 
       const sessionPromise = ai.live.connect({
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.0-flash',
         callbacks: {
           onopen: () => {
             setIsLiveActive(true);
