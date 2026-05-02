@@ -199,6 +199,19 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              const key = prompt('Enter your Gemini API Key (saved locally):');
+              if (key) {
+                localStorage.setItem('gemini_api_key', key);
+                alert('API Key saved to your browser!');
+                window.location.reload();
+              }
+            }}
+            className="text-sm px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200"
+          >
+            Set API Key
+          </button>
           <div className="relative">
             <button
               onClick={() => setExportMenuOpen(!exportMenuOpen)}

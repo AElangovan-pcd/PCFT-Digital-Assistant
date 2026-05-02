@@ -101,7 +101,7 @@ export function useLiveAPI() {
             gainNode.connect(audioCtx.destination);
 
             const sessionPromise = ai.live.connect({
-                model: "gemini-3.1-flash-live-preview",
+                model: "gemini-2.0-flash-exp",
                 callbacks: {
                     onopen: () => {
                         setIsConnecting(false);
@@ -185,6 +185,7 @@ export function useLiveAPI() {
                     },
                     onerror: (e) => {
                         console.error('Live API Error:', e);
+                        alert('Live API WebSocket Error: ' + JSON.stringify(e));
                         disconnect();
                     },
                     onclose: () => {
@@ -197,14 +198,13 @@ export function useLiveAPI() {
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
                     },
-                    inputAudioTranscription: {},
-                    outputAudioTranscription: {},
-                    systemInstruction: SYSTEM_INSTRUCTION + "\n\nCRITICAL: the user is speaking to you using voice right now. Provide clear, concise, conversational spoken-style answers — avoid tables or complex formatting. Keep your responses short like a real conversation. Only elaborate if the user asks.",
+                    systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION + "\n\nCRITICAL: the user is speaking to you using voice right now. Provide clear, concise, conversational spoken-style answers — avoid tables or complex formatting. Keep your responses short like a real conversation. Only elaborate if the user asks." }] },
                 },
             });
             sessionRef.current = await sessionPromise;
-        } catch (err) {
+        } catch (err: any) {
             console.error('Connection failed', err);
+            alert("Live Mode Error: " + (err.message || 'Unknown connection error. Please check your API Key.'));
             disconnect();
         }
     }, [disconnect]);

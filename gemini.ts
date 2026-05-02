@@ -5,10 +5,12 @@ import { SYSTEM_INSTRUCTION } from "./knowledge_base";
 let genAIClient: GoogleGenAI | null = null;
 export function getAI() {
   if (!genAIClient) {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY is not defined");
+    const storedKey = localStorage.getItem('gemini_api_key');
+    const apiKey = storedKey || process.env.GEMINI_API_KEY || '';
+    if (!apiKey) {
+      throw new Error("API Key not found. Please click 'Set API Key' in the top right to enter your key.");
     }
-    genAIClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    genAIClient = new GoogleGenAI({ apiKey });
   }
   return genAIClient;
 }
